@@ -45,10 +45,43 @@ jobs:
       - name: Build
         run: npm run build
 
+  integration:
+    name: Integration (Redis real)
+    runs-on: ubuntu-latest
+    # Existe por causa de uma regressão concreta: a partir do BullMQ 6 o ioredis
+    # virou peer opcional. Sem ele declarado, lint/typecheck/test/build ficam
+    # TODOS verdes e o worker morre na primeira conexão. Só um job real contra um
+    # Redis real pega. Este job é o gate disso — não deixe de rodá-lo.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Integration tests
+        run: npm run test:integration
+        env:
+          REDIS_URL: redis://localhost:6379
+
   docker:
     name: Build & Push image
     runs-on: ubuntu-latest
-    needs: ci
+    needs: [ci, integration]
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.event_name == 'push'
     permissions:
       contents: read

@@ -7,7 +7,8 @@ const workers = maxWorkers();
 
 export default defineConfig({
   test: {
-    exclude: ['**/node_modules/**', 'dist/**', 'coverage/**'],
+    // A suíte de integração exige Redis real — roda em test:integration.
+    exclude: ['**/node_modules/**', 'dist/**', 'coverage/**', 'src/**/*.integration.test.ts'],
     pool: 'threads',
     maxWorkers: workers,
     minWorkers: 1,

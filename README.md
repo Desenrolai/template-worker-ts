@@ -40,7 +40,8 @@ npm test
 | `npm start` | roda o build |
 | `npm run lint` | ESLint (flat config) |
 | `npm run typecheck` | `tsc --noEmit` |
-| `npm test` | Vitest |
+| `npm test` | Vitest — unitários, sem Redis |
+| `npm run test:integration` | Vitest — **exige Redis real** (`REDIS_URL`) |
 | `npm run test:cov` | Vitest + coverage |
 
 ## Environment variables
@@ -57,6 +58,36 @@ Deployed as a Kubernetes **Deployment** with no Service or Ingress.
 No HTTP port is exposed, portanto a imagem não tem `EXPOSE` nem `HEALTHCHECK` —
 o `forge.yaml` declara `port` e `healthPath` como `null` e a saúde é observada
 pela profundidade da fila (KEDA). A imagem roda como usuário não-root (`node`).
+
+## Teste de integração (exige Redis real)
+
+```bash
+docker run -d -p 6379:6379 redis:7-alpine
+REDIS_URL=redis://localhost:6379 npm run test:integration
+```
+
+Ele existe por uma razão específica, não por completude. A partir do **BullMQ 6**
+o `ioredis` deixou de vir embutido e virou peer **opcional**. Sem ele declarado
+como dependência direta, o cenário é:
+
+| Gate | Com o `ioredis` faltando |
+| --- | --- |
+| `npm run lint` | verde |
+| `npm run typecheck` | verde |
+| `npm test` (10 unitários) | verde |
+| `npm run build` | verde |
+| `node dist/index.js` | **morre**: `BullMQ could not load the optional 'ioredis' package` |
+
+Medido, não suposto: removendo o `ioredis` do `node_modules` os quatro gates
+acima continuam verdes e só `test:integration` reproduz o erro de produção.
+
+A suíte unitária testa o *processor* isolado e **nunca abre conexão** — é por
+isso que ela não pode ser o gate disso. O job `integration` do CI sobe um
+`redis:7-alpine` como service container e o `docker` depende dele
+(`needs: [ci, integration]`).
+
+Sem `REDIS_URL` o teste **falha alto** em vez de pular: um gate que se
+auto-desliga quando a variável some não é gate.
 
 ## Pool de teste e cgroup
 
