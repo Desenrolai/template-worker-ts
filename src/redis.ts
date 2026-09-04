@@ -2,7 +2,10 @@ import type { ConnectionOptions } from 'bullmq';
 
 /**
  * Parses a Redis URL into BullMQ ConnectionOptions.
- * Using URL-based options avoids bundled ioredis version conflicts.
+ *
+ * A partir do BullMQ 6 o `ioredis` deixou de vir embutido: e um peer opcional
+ * (`ioredis >= 5.0.0`) e precisa estar declarado como dependencia direta, senao
+ * o worker compila e testa verde mas morre ao abrir a conexao.
  *
  * Expected format: redis[s]://[user:password@]host[:port][/db]
  */
