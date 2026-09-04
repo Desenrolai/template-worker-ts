@@ -18,10 +18,26 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: desenrolai/${{ github.event.repository.name }}
 
+# Runner: hospedado por padrão, trocável por variável de repositório.
+#
+# Este template é PÚBLICO — em repo público o Actions hospedado é gratuito, e
+# apontar self-hosted aqui deixaria um PR de fork executar código de terceiro
+# dentro do cluster. O repo GERADO é privado: lá a cota hospedada é paga e, com
+# billing bloqueado, o job morre em ~2s com `steps: 0` (assinatura de billing,
+# não de YAML quebrado). Por isso o repo gerado define as variáveis abaixo.
+#
+#   CI_RUNNER         → ex.: ["self-hosted","desenrolai"]
+#   CI_RUNNER_DOCKER  → ex.: ["self-hosted","docker-builder"]
+#
+# `fromJSON` é obrigatório: `runs-on` com a string 'self-hosted,desenrolai' vira
+# UM label contendo vírgula — não dois — e o job fica em `queued` para sempre.
+# Sem a variável, `vars.X` é string vazia (falsy) e sobra '"ubuntu-latest"',
+# que o fromJSON devolve como o label hospedado.
+
 jobs:
   ci:
     name: Lint / Typecheck / Test / Build
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@v7
 
@@ -47,11 +63,17 @@ jobs:
 
   integration:
     name: Integration (Redis real)
-    runs-on: ubuntu-latest
     # Existe por causa de uma regressão concreta: a partir do BullMQ 6 o ioredis
     # virou peer opcional. Sem ele declarado, lint/typecheck/test/build ficam
     # TODOS verdes e o worker morre na primeira conexão. Só um job real contra um
     # Redis real pega. Este job é o gate disso — não deixe de rodá-lo.
+    #
+    # Usa CI_RUNNER_DOCKER, e não CI_RUNNER, de propósito: `services:` é um
+    # container e exige daemon Docker NO RUNNER. O pool self-hosted geral
+    # (`desenrolai`) roda com `dockerEnabled: false` — lá este job falharia por
+    # falta de daemon. O pool `docker-builder` é DinD e suporta service
+    # container. Em runner hospedado (default) os dois valores funcionam.
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_DOCKER || '"ubuntu-latest"') }}
     services:
       redis:
         image: redis:7-alpine
@@ -78,9 +100,35 @@ jobs:
         env:
           REDIS_URL: redis://localhost:6379
 
+  docker-build:
+    name: Docker build (PR, sem push)
+    # Sem este job, um Dockerfile quebrado atravessa o PR inteiro verde e só
+    # aparece depois do merge — o job de push é `skipped` em pull_request.
+    # Aqui a imagem é construída de verdade e não é publicada: sem login no
+    # GHCR e sem `packages: write` (herda `contents: read` do topo).
+    # Mantém `needs: [ci, integration]`: imagem não se constrói se a conexão
+    # real com o Redis não passou.
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_DOCKER || '"ubuntu-latest"') }}
+    needs: [ci, integration]
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image (sem push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          tags: ${{ env.IMAGE_NAME }}:pr
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
   docker:
     name: Build & Push image
-    runs-on: ubuntu-latest
+    runs-on: ${{ fromJSON(vars.CI_RUNNER_DOCKER || '"ubuntu-latest"') }}
     needs: [ci, integration]
     if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.event_name == 'push'
     permissions:

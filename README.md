@@ -83,11 +83,48 @@ acima continuam verdes e só `test:integration` reproduz o erro de produção.
 
 A suíte unitária testa o *processor* isolado e **nunca abre conexão** — é por
 isso que ela não pode ser o gate disso. O job `integration` do CI sobe um
-`redis:7-alpine` como service container e o `docker` depende dele
-(`needs: [ci, integration]`).
+`redis:7-alpine` como service container e os jobs de imagem dependem dele
+(`needs: [ci, integration]`) — inclusive o build de PR.
 
 Sem `REDIS_URL` o teste **falha alto** em vez de pular: um gate que se
 auto-desliga quando a variável some não é gate.
+
+## CI: runner do repo gerado
+
+O workflow roda em runner **hospedado** por padrão. Este template é público — em
+repo público o Actions hospedado é gratuito, e apontar self-hosted aqui deixaria
+um PR de fork executar código de terceiro dentro do cluster.
+
+⚠️ **O repo gerado é privado, e nele esse default não vale.** Com a cota
+hospedada bloqueada por billing, o job **morre em ~2 s com `steps: 0`** — sem
+step nenhum e sem mensagem que oriente. Parece YAML quebrado; é assinatura de
+**billing**. Não perca tempo procurando erro no workflow.
+
+Antes do primeiro push, defina duas **variáveis de repositório** (Settings →
+Secrets and variables → Actions → Variables) com **array JSON** de labels:
+
+| Variável           | Valor                              | Usada por                    |
+| ------------------ | ---------------------------------- | ---------------------------- |
+| `CI_RUNNER`        | `["self-hosted","desenrolai"]`     | job `ci`                     |
+| `CI_RUNNER_DOCKER` | `["self-hosted","docker-builder"]` | jobs que constroem a imagem  |
+
+```bash
+gh variable set CI_RUNNER --body '["self-hosted","desenrolai"]'
+gh variable set CI_RUNNER_DOCKER --body '["self-hosted","docker-builder"]'
+```
+
+São dois pools diferentes de propósito: o pool `desenrolai` **não tem Docker**
+(`dockerEnabled: false`), só o `docker-builder` tem. Build de imagem no pool
+errado falha por falta de daemon.
+
+JSON é obrigatório: `runs-on` com a string `self-hosted,desenrolai` vira **um**
+label contendo vírgula — não dois — e o job fica em `queued` para sempre. Sem as
+variáveis definidas, o default hospedado continua valendo.
+
+O job `integration` também usa `CI_RUNNER_DOCKER`, e não `CI_RUNNER`: o
+`services:` do Redis é um container e exige daemon Docker **no runner**. Apontá-lo
+para o pool geral faria o gate do `ioredis` cair — que é o pior desfecho
+possível, já que ele é o único gate que pega a regressão descrita acima.
 
 ## Pool de teste e cgroup
 
