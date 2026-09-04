@@ -96,9 +96,13 @@ repo público o Actions hospedado é gratuito, e apontar self-hosted aqui deixar
 um PR de fork executar código de terceiro dentro do cluster.
 
 ⚠️ **O repo gerado é privado, e nele esse default não vale.** Com a cota
-hospedada bloqueada por billing, o job **morre em ~2 s com `steps: 0`** — sem
-step nenhum e sem mensagem que oriente. Parece YAML quebrado; é assinatura de
-**billing**. Não perca tempo procurando erro no workflow.
+hospedada bloqueada por billing, o job **falha em ~2 s sem executar nenhum
+step** — e sem mensagem no log que oriente.
+
+Zero steps, sozinho, não identifica nada: um job `skipped` pelo `if:` também
+reporta zero. **O separador é a conclusão**: `failure` em ~2 s é billing;
+`skipped` é o `if:`. Parece YAML quebrado, não é — a causa costuma vir na
+*annotation* do job, não no log. Não perca tempo procurando erro no workflow.
 
 Antes do primeiro push, defina duas **variáveis de repositório** (Settings →
 Secrets and variables → Actions → Variables) com **array JSON** de labels:

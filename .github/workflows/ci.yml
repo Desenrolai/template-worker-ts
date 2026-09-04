@@ -23,8 +23,10 @@ env:
 # Este template é PÚBLICO — em repo público o Actions hospedado é gratuito, e
 # apontar self-hosted aqui deixaria um PR de fork executar código de terceiro
 # dentro do cluster. O repo GERADO é privado: lá a cota hospedada é paga e, com
-# billing bloqueado, o job morre em ~2s com `steps: 0` (assinatura de billing,
-# não de YAML quebrado). Por isso o repo gerado define as variáveis abaixo.
+# billing bloqueado, o job FALHA em ~2s sem executar nenhum step. Zero steps não
+# basta como assinatura — job `skipped` também tem zero; o separador é a
+# conclusão: `failure` em ~2s é billing, `skipped` é o `if:` do job.
+# Por isso o repo gerado define as variáveis abaixo.
 #
 #   CI_RUNNER         → ex.: ["self-hosted","desenrolai"]
 #   CI_RUNNER_DOCKER  → ex.: ["self-hosted","docker-builder"]
