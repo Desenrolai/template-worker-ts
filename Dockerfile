@@ -1,34 +1,32 @@
 # ─── builder ───────────────────────────────────────────────────────────────────
-FROM node:22-bookworm-slim AS builder
+FROM node:24-bookworm-slim AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
 RUN npm ci
 
-COPY tsconfig.json ./
+COPY tsconfig.json tsconfig.build.json ./
 COPY src/ ./src/
 
 RUN npm run build
 
 # ─── runtime ───────────────────────────────────────────────────────────────────
-FROM node:22-bookworm-slim AS runtime
+FROM node:24-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
 
 WORKDIR /app
-
-# Non-root user for security
-RUN addgroup --system --gid 1001 worker && \
-    adduser --system --uid 1001 --ingroup worker worker
 
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY --from=builder /app/dist ./dist
 
-USER worker
+# Usuario nao-root ja existente na imagem oficial (uid 1000).
+USER node
 
-# Worker connects to Redis via REDIS_URL env var.
-# No HTTP port is exposed — this is a Deployment without a Service/Ingress.
+# Sem EXPOSE e sem HEALTHCHECK: o forge.yaml declara port/healthPath null.
+# Nao ha HTTP — o worker conecta no Redis via REDIS_URL e a saude e observada
+# pela profundidade da fila (KEDA), nao por probe HTTP.
 CMD ["node", "dist/index.js"]
