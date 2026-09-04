@@ -126,9 +126,16 @@ label contendo vírgula — não dois — e o job fica em `queued` para sempre. 
 variáveis definidas, o default hospedado continua valendo.
 
 O job `integration` também usa `CI_RUNNER_DOCKER`, e não `CI_RUNNER`: o
-`services:` do Redis é um container e exige daemon Docker **no runner**. Apontá-lo
-para o pool geral faria o gate do `ioredis` cair — que é o pior desfecho
-possível, já que ele é o único gate que pega a regressão descrita acima.
+`services:` do Redis é um container e exige daemon Docker **no runner**.
+
+O que acontece se você errar aqui, medido e não suposto: apontá-lo para o pool
+geral (sem daemon) faz o job **falhar alto**, vermelho, por não conseguir subir o
+service container — ele não some nem passa em falso. E se você não definir
+`CI_RUNNER_DOCKER` nenhum, o default `ubuntu-latest` suporta `services:`
+nativamente, então o gate roda do mesmo jeito. Ou seja, **não há caminho em que
+este gate desapareça em silêncio** — que seria o desfecho ruim de verdade, já que
+ele é o único que pega a regressão descrita acima. Usar `CI_RUNNER_DOCKER` evita
+uma falha barulhenta e confusa, não uma perda silenciosa.
 
 ## Pool de teste e cgroup
 
